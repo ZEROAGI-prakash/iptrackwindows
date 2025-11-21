@@ -17,7 +17,7 @@ IPTrack is a powerful, Gemini-style command-line security tool designed specific
 - 🔄 **Easy Unblock** - Reverse blocks with a single command
 - 📈 **Security Dashboard** - Visual overview of all security events
 - 💾 **Export Logs** - Save all security data to JSON
-- 🎨 **Beautiful CLI** - Gemini-style interface with colors and formatting
+- 🎨 **Beautiful CLI** - Colorful terminal interface with clear formatting
 
 ## 📋 Requirements
 
