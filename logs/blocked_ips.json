@@ -1,0 +1,26 @@
+{
+  "45.142.120.10": {
+    "blocked_at": "2025-11-21T21:43:56.267000",
+    "reason": "Too many failed attempts",
+    "attempts": 3,
+    "method": "pfctl"
+  },
+  "185.220.101.50": {
+    "blocked_at": "2025-11-21T21:43:56.770020",
+    "reason": "Too many failed attempts",
+    "attempts": 3,
+    "method": "pfctl"
+  },
+  "203.0.113.50": {
+    "blocked_at": "2025-11-21T21:54:22.497302",
+    "reason": "Suspicious scanning activity",
+    "attempts": 0,
+    "method": "pfctl"
+  },
+  "1.2.3.4": {
+    "blocked_at": "2025-11-21T22:08:29.600408",
+    "reason": "Testing new CLI interface",
+    "attempts": 0,
+    "method": "pfctl"
+  }
+}

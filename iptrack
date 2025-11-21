@@ -1,0 +1,359 @@
+#!/usr/bin/env python3
+"""
+IPTrack - Security Monitoring and IP Management Tool
+Professional CLI with Gemini-style interface (Windows Edition)
+Cross-platform compatible
+"""
+
+import sys
+import os
+import argparse
+from datetime import datetime
+import json
+import platform
+import time
+import subprocess
+from pathlib import Path
+
+# Import appropriate security monitor based on OS
+if platform.system() == 'Windows':
+    try:
+        from security_monitor_windows import SecurityMonitor
+    except ImportError:
+        from security_monitor import SecurityMonitor
+else:
+    from security_monitor import SecurityMonitor
+
+from ip_locator import IPLocator
+from defender_control import DefenderControl
+
+# ANSI Color Codes
+class Colors:
+    """ANSI color codes for terminal output"""
+    # For Windows, we'll use colorama if available
+    try:
+        import colorama
+        colorama.init()
+    except ImportError:
+        pass
+    
+    GREEN = '\033[92m'
+    RED = '\033[91m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    MAGENTA = '\033[95m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    END = '\033[0m'
+    
+    # Emoji alternatives for Windows compatibility
+    CHECK = '✓' if platform.system() != 'Windows' else '[OK]'
+    CROSS = '✗' if platform.system() != 'Windows' else '[X]'
+    ARROW = '→' if platform.system() != 'Windows' else '->'
+    STAR = '★' if platform.system() != 'Windows' else '*'
+
+
+class IPTrackCLI:
+    """Main CLI handler for IPTrack"""
+    
+    def __init__(self):
+        self.monitor = SecurityMonitor()
+        self.locator = IPLocator()
+        self.control = DefenderControl(self.monitor, self.locator)
+        self.is_windows = platform.system() == 'Windows'
+    
+    def print_header(self, text):
+        """Print a styled header"""
+        print(f"\n{Colors.CYAN}{Colors.BOLD}{'='*60}{Colors.END}")
+        print(f"{Colors.CYAN}{Colors.BOLD}{text.center(60)}{Colors.END}")
+        print(f"{Colors.CYAN}{Colors.BOLD}{'='*60}{Colors.END}\n")
+    
+    def print_success(self, text):
+        """Print success message"""
+        print(f"{Colors.GREEN}{Colors.CHECK} {text}{Colors.END}")
+    
+    def print_error(self, text):
+        """Print error message"""
+        print(f"{Colors.RED}{Colors.CROSS} {text}{Colors.END}")
+    
+    def print_warning(self, text):
+        """Print warning message"""
+        print(f"{Colors.YELLOW}⚠ {text}{Colors.END}")
+    
+    def print_info(self, text):
+        """Print info message"""
+        print(f"{Colors.BLUE}{Colors.ARROW} {text}{Colors.END}")
+    
+    def check_admin(self):
+        """Check if running with admin privileges (Windows)"""
+        if self.is_windows:
+            try:
+                import ctypes
+                return ctypes.windll.shell32.IsUserAnAdmin()
+            except:
+                return False
+        return True  # Not Windows, assume OK
+    
+    def watch_logs(self, follow=True):
+        """Watch security logs in real-time"""
+        self.print_header("REAL-TIME LOG MONITORING")
+        
+        log_file = Path("logs") / f"security_{datetime.now().strftime('%Y%m%d')}.log"
+        
+        if not log_file.exists():
+            self.print_warning(f"Log file not found: {log_file}")
+            self.print_info("No activity logged yet. Logs will appear when events occur.")
+            return
+        
+        self.print_info(f"Monitoring: {log_file}")
+        self.print_info("Press Ctrl+C to stop\n")
+        
+        try:
+            # Cross-platform tail implementation
+            with open(log_file, 'r') as f:
+                # Go to end of file
+                if follow:
+                    f.seek(0, 2)
+                
+                while True:
+                    line = f.readline()
+                    if line:
+                        # Colorize based on log level
+                        if 'ERROR' in line or 'CRITICAL' in line or 'BLOCKED' in line:
+                            print(f"{Colors.RED}{line.strip()}{Colors.END}")
+                        elif 'WARNING' in line:
+                            print(f"{Colors.YELLOW}{line.strip()}{Colors.END}")
+                        elif 'INFO' in line:
+                            print(f"{Colors.GREEN}{line.strip()}{Colors.END}")
+                        else:
+                            print(line.strip())
+                    else:
+                        if not follow:
+                            break
+                        time.sleep(0.1)
+        
+        except KeyboardInterrupt:
+            print(f"\n{Colors.CYAN}Log monitoring stopped.{Colors.END}")
+    
+    def block_ip(self, ip_address):
+        """Block an IP address"""
+        self.print_header("BLOCK IP ADDRESS")
+        
+        # Check admin on Windows
+        if self.is_windows and not self.check_admin():
+            self.print_error("Administrator privileges required on Windows!")
+            self.print_info("Right-click terminal and select 'Run as administrator'")
+            return
+        
+        self.print_info(f"Target IP: {Colors.YELLOW}{ip_address}{Colors.END}")
+        
+        if self.monitor.block_ip(ip_address):
+            self.print_success(f"IP {ip_address} has been blocked")
+            
+            # Try to get location
+            self.print_info("Attempting to locate IP...")
+            location = self.locator.get_location(ip_address)
+            
+            if location and location.get('status') == 'success':
+                print(f"\n{Colors.MAGENTA}Location Details:{Colors.END}")
+                print(f"  City: {location.get('city', 'Unknown')}")
+                print(f"  Region: {location.get('regionName', 'Unknown')}")
+                print(f"  Country: {location.get('country', 'Unknown')}")
+                print(f"  ISP: {location.get('isp', 'Unknown')}")
+        else:
+            self.print_error(f"Failed to block IP {ip_address}")
+    
+    def unblock_ip(self, ip_address):
+        """Unblock an IP address"""
+        self.print_header("UNBLOCK IP ADDRESS")
+        
+        # Check admin on Windows
+        if self.is_windows and not self.check_admin():
+            self.print_error("Administrator privileges required on Windows!")
+            self.print_info("Right-click terminal and select 'Run as administrator'")
+            return
+        
+        self.print_info(f"Target IP: {Colors.YELLOW}{ip_address}{Colors.END}")
+        
+        if self.control.unblock_ip(ip_address):
+            self.print_success(f"IP {ip_address} has been unblocked")
+        else:
+            self.print_error(f"IP {ip_address} was not blocked")
+    
+    def list_blocked(self):
+        """List all blocked IPs"""
+        self.print_header("BLOCKED IP ADDRESSES")
+        
+        blocked = self.monitor.get_blocked_ips()
+        
+        if not blocked:
+            self.print_info("No IPs are currently blocked")
+            return
+        
+        for ip, info in blocked.items():
+            print(f"\n{Colors.RED}{Colors.BOLD}IP: {ip}{Colors.END}")
+            print(f"  Blocked at: {info.get('blocked_at', 'Unknown')}")
+            print(f"  Reason: {info.get('reason', 'Unknown')}")
+            print(f"  Attempts: {info.get('attempts', 0)}")
+            print(f"  Method: {info.get('method', 'Unknown')}")
+    
+    def locate_ip(self, ip_address):
+        """Locate an IP address"""
+        self.print_header("IP GEOLOCATION")
+        
+        self.print_info(f"Looking up: {Colors.YELLOW}{ip_address}{Colors.END}\n")
+        
+        location = self.locator.get_location(ip_address)
+        
+        if not location or location.get('status') == 'fail':
+            self.print_error(f"Could not locate IP: {ip_address}")
+            return
+        
+        print(f"{Colors.GREEN}{Colors.BOLD}Location Found:{Colors.END}\n")
+        print(f"  IP Address: {Colors.YELLOW}{ip_address}{Colors.END}")
+        print(f"  City: {location.get('city', 'Unknown')}")
+        print(f"  Region: {location.get('regionName', 'Unknown')}")
+        print(f"  Country: {location.get('country', 'Unknown')} ({location.get('countryCode', 'XX')})")
+        print(f"  Timezone: {location.get('timezone', 'Unknown')}")
+        print(f"  ISP: {location.get('isp', 'Unknown')}")
+        print(f"  Organization: {location.get('org', 'Unknown')}")
+        print(f"  Coordinates: {location.get('lat', 0)}, {location.get('lon', 0)}")
+        
+        # Show Google Maps link
+        map_url = self.locator.get_map_url(ip_address)
+        if map_url:
+            print(f"\n  {Colors.BLUE}Map: {map_url}{Colors.END}")
+    
+    def show_stats(self):
+        """Show security statistics"""
+        self.print_header("SECURITY STATISTICS")
+        
+        stats = self.monitor.get_statistics()
+        
+        print(f"{Colors.GREEN}{Colors.BOLD}System Overview:{Colors.END}\n")
+        print(f"  Platform: {stats.get('platform', 'Unknown')}")
+        print(f"  Total Attempts: {Colors.YELLOW}{stats.get('total_attempts', 0)}{Colors.END}")
+        print(f"  Unique IPs: {Colors.CYAN}{stats.get('unique_ips_attempted', 0)}{Colors.END}")
+        print(f"  Blocked IPs: {Colors.RED}{stats.get('blocked_ips_count', 0)}{Colors.END}")
+        
+        if stats.get('blocked_ips'):
+            print(f"\n{Colors.RED}Currently Blocked:{Colors.END}")
+            for ip in stats['blocked_ips']:
+                print(f"  • {ip}")
+    
+    def show_dashboard(self):
+        """Show security dashboard"""
+        self.print_header("SECURITY DASHBOARD")
+        self.control.show_dashboard()
+    
+    def export_logs(self, output_file=None):
+        """Export logs to file"""
+        self.print_header("EXPORT SECURITY LOGS")
+        
+        if not output_file:
+            output_file = f"iptrack_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        
+        if self.control.export_logs(output_file):
+            self.print_success(f"Logs exported to: {output_file}")
+        else:
+            self.print_error("Failed to export logs")
+
+
+def main():
+    """Main entry point"""
+    cli = IPTrackCLI()
+    
+    # ASCII Art Banner
+    banner = f"""
+{Colors.CYAN}{Colors.BOLD}
+    ██╗██████╗ ████████╗██████╗  █████╗  ██████╗██╗  ██╗
+    ██║██╔══██╗╚══██╔══╝██╔══██╗██╔══██╗██╔════╝██║ ██╔╝
+    ██║██████╔╝   ██║   ██████╔╝███████║██║     █████╔╝ 
+    ██║██╔═══╝    ██║   ██╔══██╗██╔══██║██║     ██╔═██╗ 
+    ██║██║        ██║   ██║  ██║██║  ██║╚██████╗██║  ██╗
+    ╚═╝╚═╝        ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝
+    
+    Security Monitor & IP Management (Windows Edition)
+    Platform: {platform.system()} | Version: 1.0.0
+{Colors.END}
+    """
+    
+    parser = argparse.ArgumentParser(
+        description='IPTrack - Security Monitor & IP Management Tool',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=banner
+    )
+    
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Watch command
+    subparsers.add_parser('watch', help='Monitor security logs in real-time')
+    
+    # Block command
+    block_parser = subparsers.add_parser('block', help='Block an IP address')
+    block_parser.add_argument('ip', help='IP address to block')
+    
+    # Unblock command
+    unblock_parser = subparsers.add_parser('unblock', help='Unblock an IP address')
+    unblock_parser.add_argument('ip', help='IP address to unblock')
+    
+    # List command
+    subparsers.add_parser('list', help='List all blocked IPs')
+    
+    # Locate command
+    locate_parser = subparsers.add_parser('locate', help='Find location of an IP')
+    locate_parser.add_argument('ip', help='IP address to locate')
+    
+    # Stats command
+    subparsers.add_parser('stats', help='Show security statistics')
+    
+    # Dashboard command
+    subparsers.add_parser('dashboard', help='Show security dashboard')
+    
+    # Export command
+    export_parser = subparsers.add_parser('export', help='Export logs to file')
+    export_parser.add_argument('-o', '--output', help='Output file name')
+    
+    # Logs command (alias for watch)
+    subparsers.add_parser('logs', help='View security logs')
+    
+    args = parser.parse_args()
+    
+    # If no command, show help
+    if not args.command:
+        print(banner)
+        parser.print_help()
+        return
+    
+    # Execute command
+    try:
+        if args.command == 'watch' or args.command == 'logs':
+            cli.watch_logs()
+        elif args.command == 'block':
+            cli.block_ip(args.ip)
+        elif args.command == 'unblock':
+            cli.unblock_ip(args.ip)
+        elif args.command == 'list':
+            cli.list_blocked()
+        elif args.command == 'locate':
+            cli.locate_ip(args.ip)
+        elif args.command == 'stats':
+            cli.show_stats()
+        elif args.command == 'dashboard':
+            cli.show_dashboard()
+        elif args.command == 'export':
+            cli.export_logs(args.output)
+        else:
+            parser.print_help()
+    
+    except KeyboardInterrupt:
+        print(f"\n{Colors.YELLOW}Operation cancelled by user{Colors.END}")
+    except Exception as e:
+        cli.print_error(f"Error: {str(e)}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

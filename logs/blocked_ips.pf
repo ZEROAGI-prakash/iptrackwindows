@@ -1,0 +1,4 @@
+block drop from 45.142.120.10 to any
+block drop from 185.220.101.50 to any
+block drop from 203.0.113.50 to any
+block drop from 1.2.3.4 to any
